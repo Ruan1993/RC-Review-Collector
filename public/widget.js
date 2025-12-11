@@ -2,7 +2,8 @@
   // Determine API URL based on script source
   const script = document.currentScript || document.querySelector('script[src*="widget.js"]');
   const scriptUrl = new URL(script.src);
-  const API_URL = `${scriptUrl.origin}/api/widget`;
+  const widgetId = scriptUrl.searchParams.get('id');
+  const API_URL = `${scriptUrl.origin}/api/widget${widgetId ? `?id=${widgetId}` : ''}`;
 
   // Create container
   const container = document.createElement('div');

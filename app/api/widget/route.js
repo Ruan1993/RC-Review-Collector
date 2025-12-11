@@ -4,9 +4,13 @@ import { doc, getDoc } from 'firebase/firestore';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request) {
   try {
-    const docRef = doc(db, 'widgets', 'default-widget');
+    // Get the widget ID from the URL query parameter (default to 'default-widget')
+    const { searchParams } = new URL(request.url);
+    const widgetId = searchParams.get('id') || 'default-widget';
+
+    const docRef = doc(db, 'widgets', widgetId);
     const docSnap = await getDoc(docRef);
 
     if (!docSnap.exists()) {
