@@ -6,10 +6,10 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const OUTSCRAPER_API_KEY = 'NGQ0MzQ4YjFmZTdjNDE5NjhkNzA3ZjJlNzQ0YTk5MDF8NDZjYWEyM2FmNg';
+    const apiKey = process.env.GOOGLE_API_KEY;
 
-    if (!OUTSCRAPER_API_KEY) {
-      return NextResponse.json({ error: 'Missing Outscraper API Key' }, { status: 500 });
+    if (!apiKey) {
+      return NextResponse.json({ error: 'Missing GOOGLE_API_KEY' }, { status: 500 });
     }
 
     const widgetsRef = collection(db, 'widgets');
@@ -28,98 +28,70 @@ export async function GET() {
       }
 
       try {
-        // --- SWITCH TO OUTSCRAPER API ---
-        // Using Outscraper to get full review history + photos
-        console.log(`[${docId}] Fetching reviews from Outscraper for Place ID: ${placeId}`);
-        
-        const url = `https://api.app.outscraper.com/maps/reviews-v3?query=${placeId}&reviewsLimit=50&async=false&apiKey=${OUTSCRAPER_API_KEY}`;
-        
+        // --- SWITCH BACK TO LEGACY PLACES API ---
+        const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=reviews,rating,user_ratings_total&key=${apiKey}`;
         const response = await fetch(url);
         const data = await response.json();
 
-        // LOGGING: Check raw data from Outscraper
-        // console.log(`[${docId}] Raw Outscraper Response:`, JSON.stringify(data));
-
-        if (!data || !data.data || data.data.length === 0) {
-           results.push({ id: docId, status: 'error', error: 'Outscraper returned no data' });
-           continue;
+        if (data.status !== 'OK') {
+          results.push({ id: docId, status: 'error', error: 'Google API Error', details: data });
+          continue;
         }
 
-        // Outscraper returns an array of results (one per query)
-        const placeData = data.data[0];
-        const latestReviews = placeData.reviews_data || [];
-        
-        // --- HYBRID VAULT LOGIC (MERGE) ---
+        const { result } = data;
+        const latestReviews = result.reviews || [];
+
+        // --- VAULT LOGIC (MERGE ONLY) ---
         // 1. Get existing reviews from Firestore
         const existingReviews = widgetData.reviews || []; 
         
-        // 2. Create a Map of existing reviews for quick lookup (by review_id if available, or timestamp+author)
-        // We use a composite key: google_id (if available) OR timestamp + author_name
+        // 2. Create a Map of existing reviews for quick lookup
         const existingMap = new Map();
         existingReviews.forEach(r => {
-            const key = r.google_id || `${r.time}_${r.author_name}`;
+            // Use time + author as a unique composite key
+            const key = `${r.time}_${r.author_name}`;
             existingMap.set(key, r);
         });
 
         const newReviewsToAdd = [];
 
-        // 3. Process fetched reviews
+        // 3. Process fetched reviews (Legacy API returns 5 max)
         for (const review of latestReviews) {
-            // Outscraper fields mapping
-            const googleId = review.google_id || review.review_id; // Check available ID fields
-            const timestamp = review.review_timestamp;
-            const authorName = review.author_title;
-            
-            // Generate Key
-            const key = googleId || `${timestamp}_${authorName}`;
+            const timestamp = review.time;
+            const authorName = review.author_name;
+            const key = `${timestamp}_${authorName}`;
 
-            // Check if exists
+            // SKIP if already exists in our "Vault"
             if (existingMap.has(key)) {
-                // SKIP - Do not overwrite existing reviews (protects manual edits)
                 continue;
             }
 
-            // Map Outscraper fields to our schema
-            let photoUrls = [];
-            if (review.review_img_url) {
-                // Outscraper usually returns a single string or null? 
-                // Documentation says string (url). If multiple, maybe comma separated? 
-                // Assuming string for now, verifying if it's a valid URL.
-                if (typeof review.review_img_url === 'string' && review.review_img_url.length > 0) {
-                     photoUrls = [review.review_img_url];
-                } else if (Array.isArray(review.review_img_url)) {
-                     photoUrls = review.review_img_url;
-                }
-            }
-
+            // Map Legacy API fields
             const newReview = {
-                google_id: googleId || null,
-                author_name: review.author_title,
-                author_url: review.author_link,
-                profile_photo_url: review.author_image || null,
-                rating: review.review_rating,
-                text: review.review_text || "",
-                time: review.review_timestamp, // Unix timestamp
-                relative_time_description: review.review_datetime_utc, // or similar
-                photos: photoUrls 
+                author_name: review.author_name,
+                author_url: review.author_url,
+                profile_photo_url: review.profile_photo_url || null,
+                rating: review.rating,
+                text: review.text || "",
+                time: review.time, 
+                relative_time_description: review.relative_time_description,
+                photos: [] // Text-only for now per instruction
             };
             
             newReviewsToAdd.push(newReview);
         }
 
-        // 4. Merge
+        // 4. Merge & Sort
         let finalReviews = [...existingReviews, ...newReviewsToAdd];
-
-        // 5. Sort by time (newest first)
         finalReviews.sort((a, b) => b.time - a.time);
         
-        console.log(`[${docId}] Merged ${newReviewsToAdd.length} new reviews. Total: ${finalReviews.length}`);
+        console.log(`[${docId}] Vault Status: Found ${latestReviews.length} from Google. Added ${newReviewsToAdd.length} new. Total in Vault: ${finalReviews.length}`);
 
         // Prepare update data
         const updateData = {
           reviews: finalReviews, 
-          rating: placeData.rating || 0,
-          user_ratings_total: placeData.reviews || 0,
+          rating: result.rating || 0,
+          user_ratings_total: result.user_ratings_total || 0,
           lastUpdated: serverTimestamp(),
         };
 
@@ -130,7 +102,7 @@ export async function GET() {
           id: docId, 
           status: 'success', 
           placeId: placeId,
-          rating: placeData.rating,
+          rating: result.rating,
           reviewCount: finalReviews.length,
           newAdded: newReviewsToAdd.length
         });
