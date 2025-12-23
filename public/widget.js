@@ -159,20 +159,23 @@
       return;
     }
 
+    console.log('Total reviews in state:', data.reviews.length);
+
     // Sort by time descending (Newest first)
-    const sortedReviews = data.reviews.sort((a, b) => b.time - a.time);
+    const sortedReviews = data.reviews.sort((a, b) => (b.time || 0) - (a.time || 0));
 
     const starSvg = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
     
     // Global rating stars
     const starsHtml = Array(5).fill(0).map((_, i) => 
-      `<span style="opacity: ${i < Math.round(data.rating) ? 1 : 0.3}">${starSvg}</span>`
+      `<span style="opacity: ${i < Math.round(data.rating || 5) ? 1 : 0.3}">${starSvg}</span>`
     ).join('');
 
     // Generate HTML for ALL reviews
     const reviewsHtml = sortedReviews.map(review => {
+        const rating = typeof review.rating === 'number' ? review.rating : 5;
         const reviewStarsHtml = Array(5).fill(0).map((_, i) => 
-          `<span style="opacity: ${i < review.rating ? 1 : 0.3}">${starSvg}</span>`
+          `<span style="opacity: ${i < rating ? 1 : 0.3}">${starSvg}</span>`
         ).join('');
 
         // Avatar Logic
@@ -186,25 +189,29 @@
             if (cleanProfileUrl.length > 0) avatarSrc = cleanProfileUrl;
         }
 
+        const authorName = review.author_name || "Anonymous";
         let avatarHtml = '';
-        const initial = review.author_name ? review.author_name.charAt(0).toUpperCase() : '?';
+        const initial = authorName.charAt(0).toUpperCase();
         const placeholderHtml = `<div class="avatar-placeholder" style="display: ${avatarSrc ? 'none' : 'flex'}">${initial}</div>`;
 
         if (avatarSrc) {
-          avatarHtml = `<img src="${avatarSrc}" class="review-avatar" alt="${review.author_name}" onload="this.classList.add('loaded')" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">` + placeholderHtml;
+          avatarHtml = `<img src="${avatarSrc}" class="review-avatar" alt="${authorName}" onload="this.classList.add('loaded')" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">` + placeholderHtml;
         } else {
           avatarHtml = placeholderHtml;
         }
+
+        const text = review.text || "";
+        const displayText = text.length > 120 ? text.substring(0, 120) + '...' : text;
 
         return `
           <div class="review-item">
             <div class="review-author-container">
                 ${avatarHtml}
-                <span class="review-author-name">${review.author_name}</span>
+                <span class="review-author-name">${authorName}</span>
             </div>
             <div class="stars" style="display:flex; gap:1px; margin-bottom: 8px;">${reviewStarsHtml}</div>
             <div class="review-content">
-                "${review.text.length > 120 ? review.text.substring(0, 120) + '...' : review.text}"
+                "${displayText}"
             </div>
           </div>
         `;
@@ -214,10 +221,10 @@
       <style>${styles}</style>
       <div class="widget-container">
         <div class="header">
-          <div class="rating-badge">${data.rating} ★</div>
+          <div class="rating-badge">${data.rating || 5} ★</div>
           <div>
             <div class="stars" style="display:flex; gap:2px; margin:0;">${starsHtml}</div>
-            <div class="total-reviews">${data.user_ratings_total} Google Reviews</div>
+            <div class="total-reviews">${data.user_ratings_total || data.reviews.length} Google Reviews</div>
           </div>
         </div>
         <div class="reviews-list">
