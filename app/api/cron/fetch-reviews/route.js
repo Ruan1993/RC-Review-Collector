@@ -73,11 +73,11 @@ export async function GET() {
 
             // Map Google API fields to our Schema
             const newReview = {
-                author_name: review.author_name,
+                author_name: review.author_name ? String(review.author_name).trim() : "Anonymous",
                 author_url: review.author_url,
                 profile_photo_url: review.profile_photo_url || null,
-                rating: review.rating,
-                text: review.text || "",
+                rating: Number(review.rating) || 0,
+                text: review.text ? String(review.text).trim() : "",
                 time: review.time, 
                 relative_time_description: review.relative_time_description,
                 photos: [] // Text-Only Mode: We do not fetch/save photos from Google

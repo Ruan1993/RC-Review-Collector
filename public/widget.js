@@ -173,7 +173,7 @@
 
     // Generate HTML for ALL reviews
     const reviewsHtml = sortedReviews.map(review => {
-        const rating = typeof review.rating === 'number' ? review.rating : 5;
+        const rating = Number(review.rating) || 5;
         const reviewStarsHtml = Array(5).fill(0).map((_, i) => 
           `<span style="opacity: ${i < rating ? 1 : 0.3}">${starSvg}</span>`
         ).join('');
@@ -189,7 +189,8 @@
             if (cleanProfileUrl.length > 0) avatarSrc = cleanProfileUrl;
         }
 
-        const authorName = review.author_name || "Anonymous";
+        const rawAuthor = review.author_name || "Anonymous";
+        const authorName = rawAuthor.trim();
         let avatarHtml = '';
         const initial = authorName.charAt(0).toUpperCase();
         const placeholderHtml = `<div class="avatar-placeholder" style="display: ${avatarSrc ? 'none' : 'flex'}">${initial}</div>`;
@@ -200,8 +201,10 @@
           avatarHtml = placeholderHtml;
         }
 
-        const text = review.text || "";
+        const rawText = review.text || "";
+        const text = rawText.trim();
         const displayText = text.length > 120 ? text.substring(0, 120) + '...' : text;
+        const contentHtml = displayText ? `"${displayText}"` : '';
 
         return `
           <div class="review-item">
@@ -211,7 +214,7 @@
             </div>
             <div class="stars" style="display:flex; gap:1px; margin-bottom: 8px;">${reviewStarsHtml}</div>
             <div class="review-content">
-                "${displayText}"
+                ${contentHtml}
             </div>
           </div>
         `;
