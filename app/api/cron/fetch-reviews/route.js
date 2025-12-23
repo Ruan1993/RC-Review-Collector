@@ -35,7 +35,7 @@ export async function GET() {
             headers: {
                 'Content-Type': 'application/json',
                 'X-Goog-Api-Key': apiKey,
-                'X-Goog-FieldMask': 'reviews,rating,userRatingCount,displayName'
+                'X-Goog-FieldMask': 'reviews.text,reviews.rating,reviews.publishTime,reviews.authorAttribution,reviews.photos,rating,userRatingCount,displayName'
             }
         });
         
@@ -66,10 +66,12 @@ export async function GET() {
             const processedNewReviews = newReviews.map(review => {
                 
                 let photoUrls = [];
+                // Check for photos array in the review object (v1 API)
                 if (review.photos && Array.isArray(review.photos)) {
                     photoUrls = review.photos.map(photo => {
                         // New API returns resource name like "places/PLACE_ID/photos/PHOTO_ID"
                         // URL format: https://places.googleapis.com/v1/{name}/media
+                        // Ensure we use the correct 'name' field from the photo object
                         return `https://places.googleapis.com/v1/${photo.name}/media?maxHeightPx=800&maxWidthPx=800&key=${apiKey}`;
                     });
                 }
