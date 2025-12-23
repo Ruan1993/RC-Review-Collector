@@ -6,10 +6,10 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const apiKey = process.env.GOOGLE_API_KEY;
+    const OUTSCRAPER_API_KEY = 'NGQ0MzQ4YjFmZTdjNDE5NjhkNzA3ZjJlNzQ0YTk5MDF8NDZjYWEyM2FmNg';
 
-    if (!apiKey) {
-      return NextResponse.json({ error: 'Missing GOOGLE_API_KEY' }, { status: 500 });
+    if (!OUTSCRAPER_API_KEY) {
+      return NextResponse.json({ error: 'Missing Outscraper API Key' }, { status: 500 });
     }
 
     const widgetsRef = collection(db, 'widgets');
@@ -28,71 +28,98 @@ export async function GET() {
       }
 
       try {
-        // --- SWITCH BACK TO LEGACY PLACES API ---
-        // Reason: V1 API has known restriction/bug omitting photos for some keys.
-        const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=reviews,rating,user_ratings_total&key=${apiKey}`;
+        // --- SWITCH TO OUTSCRAPER API ---
+        // Using Outscraper to get full review history + photos
+        console.log(`[${docId}] Fetching reviews from Outscraper for Place ID: ${placeId}`);
+        
+        const url = `https://api.app.outscraper.com/maps/reviews-v3?query=${placeId}&reviewsLimit=50&async=false&apiKey=${OUTSCRAPER_API_KEY}`;
+        
         const response = await fetch(url);
         const data = await response.json();
 
-        // LOGGING: Check raw data from Google
-        console.log(`[${docId}] Raw Google Response:`, JSON.stringify(data));
+        // LOGGING: Check raw data from Outscraper
+        // console.log(`[${docId}] Raw Outscraper Response:`, JSON.stringify(data));
 
-        if (data.status !== 'OK') {
-          results.push({ id: docId, status: 'error', error: 'Google API Error', details: data });
-          continue;
+        if (!data || !data.data || data.data.length === 0) {
+           results.push({ id: docId, status: 'error', error: 'Outscraper returned no data' });
+           continue;
         }
 
-        const { result } = data;
+        // Outscraper returns an array of results (one per query)
+        const placeData = data.data[0];
+        const latestReviews = placeData.reviews_data || [];
         
-        // --- FORCE EXECUTION RUN (HARD OVERWRITE) ---
-        // 1. Hard-code empty array (ignoring DB) to ensure we overwrite everything
-        const existingReviews = []; 
+        // --- HYBRID VAULT LOGIC (MERGE) ---
+        // 1. Get existing reviews from Firestore
+        const existingReviews = widgetData.reviews || []; 
         
-        // 2. Get latest from Google (Legacy API structure)
-        const latestReviews = result.reviews || [];
-        
-        // 3. No ID check / Duplicate check - Take EVERYTHING from Google
-        const newReviews = latestReviews;
+        // 2. Create a Map of existing reviews for quick lookup (by review_id if available, or timestamp+author)
+        // We use a composite key: google_id (if available) OR timestamp + author_name
+        const existingMap = new Map();
+        existingReviews.forEach(r => {
+            const key = r.google_id || `${r.time}_${r.author_name}`;
+            existingMap.set(key, r);
+        });
 
-        let finalReviews = [...existingReviews];
+        const newReviewsToAdd = [];
 
-        if (newReviews.length > 0) {
-            // Map new reviews to match existing schema
-            const processedNewReviews = newReviews.map(review => {
-                
-                let photoUrls = [];
-                // Check for photos array in the review object (Legacy API)
-                if (review.photos && Array.isArray(review.photos)) {
-                    photoUrls = review.photos.map(photo => {
-                        // Legacy API returns photo_reference
-                        // URL format: https://maps.googleapis.com/maps/api/place/photo
-                        return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photo.photo_reference}&key=${apiKey}`;
-                    });
+        // 3. Process fetched reviews
+        for (const review of latestReviews) {
+            // Outscraper fields mapping
+            const googleId = review.google_id || review.review_id; // Check available ID fields
+            const timestamp = review.review_timestamp;
+            const authorName = review.author_title;
+            
+            // Generate Key
+            const key = googleId || `${timestamp}_${authorName}`;
+
+            // Check if exists
+            if (existingMap.has(key)) {
+                // SKIP - Do not overwrite existing reviews (protects manual edits)
+                continue;
+            }
+
+            // Map Outscraper fields to our schema
+            let photoUrls = [];
+            if (review.review_img_url) {
+                // Outscraper usually returns a single string or null? 
+                // Documentation says string (url). If multiple, maybe comma separated? 
+                // Assuming string for now, verifying if it's a valid URL.
+                if (typeof review.review_img_url === 'string' && review.review_img_url.length > 0) {
+                     photoUrls = [review.review_img_url];
+                } else if (Array.isArray(review.review_img_url)) {
+                     photoUrls = review.review_img_url;
                 }
+            }
 
-                return {
-                    ...review,
-                    profile_photo_url: review.profile_photo_url || null,
-                    photos: photoUrls || [] // Store array of valid image URLs
-                };
-            });
-
-            // Add new reviews to the list
-            finalReviews = [...finalReviews, ...processedNewReviews];
+            const newReview = {
+                google_id: googleId || null,
+                author_name: review.author_title,
+                author_url: review.author_link,
+                profile_photo_url: review.author_image || null,
+                rating: review.review_rating,
+                text: review.review_text || "",
+                time: review.review_timestamp, // Unix timestamp
+                relative_time_description: review.review_datetime_utc, // or similar
+                photos: photoUrls 
+            };
             
-            // Sort by time (newest first)
-            finalReviews.sort((a, b) => b.time - a.time);
-            
-            console.log(`[${docId}] Overwrote ${processedNewReviews.length} reviews (Force Refresh via Legacy API).`);
-        } else {
-            console.log(`[${docId}] No new reviews found in Google response.`);
+            newReviewsToAdd.push(newReview);
         }
+
+        // 4. Merge
+        let finalReviews = [...existingReviews, ...newReviewsToAdd];
+
+        // 5. Sort by time (newest first)
+        finalReviews.sort((a, b) => b.time - a.time);
+        
+        console.log(`[${docId}] Merged ${newReviewsToAdd.length} new reviews. Total: ${finalReviews.length}`);
 
         // Prepare update data
         const updateData = {
-          reviews: finalReviews, // Save the combined list
-          rating: result.rating || 0,
-          user_ratings_total: result.user_ratings_total || 0,
+          reviews: finalReviews, 
+          rating: placeData.rating || 0,
+          user_ratings_total: placeData.reviews || 0,
           lastUpdated: serverTimestamp(),
         };
 
@@ -103,9 +130,9 @@ export async function GET() {
           id: docId, 
           status: 'success', 
           placeId: placeId,
-          rating: result.rating,
+          rating: placeData.rating,
           reviewCount: finalReviews.length,
-          newAdded: newReviews.length
+          newAdded: newReviewsToAdd.length
         });
 
       } catch (err) {
