@@ -48,12 +48,15 @@ export async function GET() {
 
         const { result } = data;
         
-        // --- FORCE RE-SYNC: Overwrite Mode ---
-        // We ignore existing reviews in the DB to force a full refresh from Google.
+        // --- FORCE EXECUTION RUN ---
+        // 1. Hard-code empty array (ignoring DB)
         const existingReviews = []; 
+        // const existingReviews = widgetData.reviews || []; // COMMENTED OUT PER INSTRUCTION
+
+        // 2. Get latest from Google
         const latestReviews = result.reviews || [];
         
-        // Use all fetched reviews (no duplicate checking)
+        // 3. No ID check / Duplicate check - Take EVERYTHING from Google
         const newReviews = latestReviews;
 
         let finalReviews = [...existingReviews];
@@ -85,9 +88,9 @@ export async function GET() {
             // Sort by time (newest first)
             finalReviews.sort((a, b) => b.time - a.time);
             
-            console.log(`[${docId}] Overwriting with ${processedNewReviews.length} new reviews.`);
+            console.log(`[${docId}] Force Overwrite: Saving ${processedNewReviews.length} reviews.`);
         } else {
-            console.log(`[${docId}] No new reviews found.`);
+            console.log(`[${docId}] No new reviews found in Google response.`);
         }
 
         // Prepare update data
