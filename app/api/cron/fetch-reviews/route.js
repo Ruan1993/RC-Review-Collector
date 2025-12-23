@@ -56,13 +56,30 @@ export async function GET() {
         let finalReviews = [...existingReviews];
 
         if (newReviews.length > 0) {
+            // Map new reviews to ensure profile_photo_url is present (with fallback)
+            // AND process review photos into viewable URLs
+            const processedNewReviews = newReviews.map(review => {
+                let photoUrls = [];
+                if (review.photos && Array.isArray(review.photos)) {
+                    photoUrls = review.photos.map(photo => {
+                        return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photo.photo_reference}&key=${apiKey}`;
+                    });
+                }
+
+                return {
+                    ...review,
+                    profile_photo_url: review.profile_photo_url || null,
+                    photos: photoUrls // Store array of valid image URLs
+                };
+            });
+
             // Add new reviews to the list
-            finalReviews = [...finalReviews, ...newReviews];
+            finalReviews = [...finalReviews, ...processedNewReviews];
             
             // Sort by time (newest first)
             finalReviews.sort((a, b) => b.time - a.time);
             
-            console.log(`[${docId}] Added ${newReviews.length} new reviews. Total: ${finalReviews.length}`);
+            console.log(`[${docId}] Added ${processedNewReviews.length} new reviews. Total: ${finalReviews.length}`);
         } else {
             console.log(`[${docId}] No new reviews found. Keeping existing ${existingReviews.length}.`);
         }
