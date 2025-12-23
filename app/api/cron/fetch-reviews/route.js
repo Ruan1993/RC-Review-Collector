@@ -48,26 +48,13 @@ export async function GET() {
 
         const { result } = data;
         
-        // --- REFACTOR: Incremental Append Logic ---
+        // --- FORCE RE-SYNC: Overwrite Mode ---
+        // We ignore existing reviews in the DB to force a full refresh from Google.
+        const existingReviews = []; 
         const latestReviews = result.reviews || [];
         
-        // --- TEMPORARY FIX: FORCE RE-SYNC ---
-        // Treat all fetched reviews as new, regardless of what's in the DB.
-        const existingReviews = []; 
-
-        // Filter out duplicates based on author_name and time
-        // Note: Google Places API reviews don't always have a stable unique ID, 
-        // so we use a composite key of author + time.
-        // --- TEMPORARY: DISABLED DUPLICATE CHECK TO FORCE OVERWRITE ---
+        // Use all fetched reviews (no duplicate checking)
         const newReviews = latestReviews;
-        /*
-        const newReviews = latestReviews.filter(latest => {
-          return !existingReviews.some(existing => 
-            existing.author_name === latest.author_name && 
-            existing.time === latest.time
-          );
-        });
-        */
 
         let finalReviews = [...existingReviews];
 
@@ -98,9 +85,9 @@ export async function GET() {
             // Sort by time (newest first)
             finalReviews.sort((a, b) => b.time - a.time);
             
-            console.log(`[${docId}] Added ${processedNewReviews.length} new reviews. Total: ${finalReviews.length}`);
+            console.log(`[${docId}] Overwriting with ${processedNewReviews.length} new reviews.`);
         } else {
-            console.log(`[${docId}] No new reviews found. Keeping existing ${existingReviews.length}.`);
+            console.log(`[${docId}] No new reviews found.`);
         }
 
         // Prepare update data
