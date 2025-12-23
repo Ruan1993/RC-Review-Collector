@@ -168,12 +168,19 @@
 
     // 1. Check photos array (User preference: "saved image URLs inside photos")
     // Safe check: photos exists, is array, has length, and first item is valid string
-    if (topReview.photos && Array.isArray(topReview.photos) && topReview.photos.length > 0 && topReview.photos[0]) {
-        avatarSrc = topReview.photos[0];
+    if (topReview.photos && Array.isArray(topReview.photos) && topReview.photos.length > 0 && typeof topReview.photos[0] === 'string') {
+        const cleanUrl = topReview.photos[0].trim();
+        if (cleanUrl.length > 0) {
+            avatarSrc = cleanUrl;
+        }
     }
+    
     // 2. Fallback to profile_photo_url
-    else if (topReview.profile_photo_url) {
-        avatarSrc = topReview.profile_photo_url;
+    if (!avatarSrc && topReview.profile_photo_url && typeof topReview.profile_photo_url === 'string') {
+        const cleanProfileUrl = topReview.profile_photo_url.trim();
+        if (cleanProfileUrl.length > 0) {
+            avatarSrc = cleanProfileUrl;
+        }
     }
 
     let avatarHtml = '';
