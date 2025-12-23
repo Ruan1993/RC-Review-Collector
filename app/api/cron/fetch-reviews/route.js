@@ -32,6 +32,15 @@ export async function GET() {
         const response = await fetch(url);
         const data = await response.json();
 
+        // LOGGING: Check raw data from Google
+        console.log(`[${docId}] Raw Google Response for reviews:`, 
+            data.result?.reviews?.map(r => ({ 
+                author: r.author_name, 
+                hasPhotos: !!r.photos, 
+                photoCount: r.photos?.length 
+            }))
+        );
+
         if (data.status !== 'OK') {
           results.push({ id: docId, status: 'error', error: 'Google API Error', details: data });
           continue;
