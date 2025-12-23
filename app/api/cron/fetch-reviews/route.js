@@ -51,21 +51,23 @@ export async function GET() {
         // --- REFACTOR: Incremental Append Logic ---
         const latestReviews = result.reviews || [];
         
-        // --- TEMPORARY FIX: WIPE LOGIC ---
-        // Instead of merging, we are reprocessing the fetched reviews to fix missing photos.
-        // We will treat all fetched reviews as "new" to ensure they get the photo URL processing.
-        // const existingReviews = widgetData.reviews || []; // DISABLED FOR FIX
-        const existingReviews = []; // Treat as empty to force overwrite/re-add
+        // --- TEMPORARY FIX: FORCE RE-SYNC ---
+        // Treat all fetched reviews as new, regardless of what's in the DB.
+        const existingReviews = []; 
 
         // Filter out duplicates based on author_name and time
         // Note: Google Places API reviews don't always have a stable unique ID, 
         // so we use a composite key of author + time.
+        // --- TEMPORARY: DISABLED DUPLICATE CHECK TO FORCE OVERWRITE ---
+        const newReviews = latestReviews;
+        /*
         const newReviews = latestReviews.filter(latest => {
           return !existingReviews.some(existing => 
             existing.author_name === latest.author_name && 
             existing.time === latest.time
           );
         });
+        */
 
         let finalReviews = [...existingReviews];
 
@@ -73,6 +75,9 @@ export async function GET() {
             // Map new reviews to ensure profile_photo_url is present (with fallback)
             // AND process review photos into viewable URLs
             const processedNewReviews = newReviews.map(review => {
+                // LOGGING: Detailed review data
+                console.log('Google Raw Review:', JSON.stringify(review));
+
                 let photoUrls = [];
                 if (review.photos && Array.isArray(review.photos)) {
                     photoUrls = review.photos.map(photo => {
