@@ -91,6 +91,35 @@
       font-size: 12px;
       text-align: center;
     }
+    .review-author-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .review-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.3s ease-in;
+    }
+    .review-avatar.loaded {
+      opacity: 1;
+    }
+    .avatar-placeholder {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background-color: #ffc0cb; /* Pink background */
+      color: #333;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 18px;
+    }
   `;
 
   // Fetch Data
@@ -135,12 +164,26 @@
     ).join('');
 
     // Avatar Logic
+    let avatarSrc = null;
+
+    // 1. Check photos array (User preference: "saved image URLs inside photos")
+    // Safe check: photos exists, is array, has length, and first item is valid string
+    if (topReview.photos && Array.isArray(topReview.photos) && topReview.photos.length > 0 && topReview.photos[0]) {
+        avatarSrc = topReview.photos[0];
+    }
+    // 2. Fallback to profile_photo_url
+    else if (topReview.profile_photo_url) {
+        avatarSrc = topReview.profile_photo_url;
+    }
+
     let avatarHtml = '';
-    if (topReview.profile_photo_url) {
-      avatarHtml = `<img src="${topReview.profile_photo_url}" class="review-avatar" alt="${topReview.author_name}" onload="this.classList.add('loaded')">`;
+    const initial = topReview.author_name ? topReview.author_name.charAt(0).toUpperCase() : '?';
+    const placeholderHtml = `<div class="avatar-placeholder" style="display: ${avatarSrc ? 'none' : 'flex'}">${initial}</div>`;
+
+    if (avatarSrc) {
+      avatarHtml = `<img src="${avatarSrc}" class="review-avatar" alt="${topReview.author_name}" onload="this.classList.add('loaded')" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">` + placeholderHtml;
     } else {
-      const initial = topReview.author_name ? topReview.author_name.charAt(0).toUpperCase() : '?';
-      avatarHtml = `<div class="avatar-placeholder">${initial}</div>`;
+      avatarHtml = placeholderHtml;
     }
 
     shadow.innerHTML = `
