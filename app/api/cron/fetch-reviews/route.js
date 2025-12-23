@@ -28,33 +28,33 @@ export async function GET() {
       }
 
       try {
-        const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=reviews,rating,user_ratings_total&reviews_sort=newest&key=${apiKey}`;
-        const response = await fetch(url);
+        // --- SWITCH TO NEW PLACES API (v1) ---
+        const url = `https://places.googleapis.com/v1/places/${placeId}`;
+        
+        const response = await fetch(url, {
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Goog-Api-Key': apiKey,
+                'X-Goog-FieldMask': 'reviews,rating,userRatingCount,displayName'
+            }
+        });
+        
         const data = await response.json();
 
         // LOGGING: Check raw data from Google
-        console.log(`[${docId}] Raw Google Response for reviews:`, 
-            data.result?.reviews?.map(r => ({ 
-                author: r.author_name, 
-                hasPhotos: !!r.photos, 
-                photoCount: r.photos?.length 
-            }))
-        );
+        console.log(`[${docId}] Raw Google Response:`, JSON.stringify(data));
 
-        if (data.status !== 'OK') {
-          results.push({ id: docId, status: 'error', error: 'Google API Error', details: data });
+        if (data.error) {
+          results.push({ id: docId, status: 'error', error: 'Google API Error', details: data.error });
           continue;
         }
 
-        const { result } = data;
-        
         // --- FORCE EXECUTION RUN ---
         // 1. Hard-code empty array (ignoring DB)
         const existingReviews = []; 
-        // const existingReviews = widgetData.reviews || []; // COMMENTED OUT PER INSTRUCTION
-
-        // 2. Get latest from Google
-        const latestReviews = result.reviews || [];
+        
+        // 2. Get latest from Google (New API structure)
+        const latestReviews = data.reviews || [];
         
         // 3. No ID check / Duplicate check - Take EVERYTHING from Google
         const newReviews = latestReviews;
@@ -62,23 +62,28 @@ export async function GET() {
         let finalReviews = [...existingReviews];
 
         if (newReviews.length > 0) {
-            // Map new reviews to ensure profile_photo_url is present (with fallback)
-            // AND process review photos into viewable URLs
+            // Map new reviews to match existing schema
             const processedNewReviews = newReviews.map(review => {
-                // LOGGING: Detailed review data
-                console.log('Google Raw Review:', JSON.stringify(review));
-
+                
                 let photoUrls = [];
                 if (review.photos && Array.isArray(review.photos)) {
                     photoUrls = review.photos.map(photo => {
-                        return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photo.photo_reference}&key=${apiKey}`;
+                        // New API returns resource name like "places/PLACE_ID/photos/PHOTO_ID"
+                        // URL format: https://places.googleapis.com/v1/{name}/media
+                        return `https://places.googleapis.com/v1/${photo.name}/media?maxHeightPx=800&maxWidthPx=800&key=${apiKey}`;
                     });
                 }
 
+                // Map New API fields to Legacy schema
                 return {
-                    ...review,
-                    profile_photo_url: review.profile_photo_url || null,
-                    photos: photoUrls || [] // Store array of valid image URLs, default to empty array
+                    author_name: review.authorAttribution?.displayName,
+                    author_url: review.authorAttribution?.uri,
+                    profile_photo_url: review.authorAttribution?.photoUri || null,
+                    rating: review.rating,
+                    text: review.text?.text || review.originalText?.text || "",
+                    time: review.publishTime ? new Date(review.publishTime).getTime() / 1000 : Date.now() / 1000, // Convert ISO to Unix timestamp
+                    relative_time_description: review.relativePublishTimeDescription,
+                    photos: photoUrls // Store array of valid image URLs
                 };
             });
 
@@ -96,8 +101,8 @@ export async function GET() {
         // Prepare update data
         const updateData = {
           reviews: finalReviews, // Save the combined list
-          rating: result.rating || 0,
-          user_ratings_total: result.user_ratings_total || 0,
+          rating: data.rating || 0,
+          user_ratings_total: data.userRatingCount || 0, // Note: userRatingCount in New API vs user_ratings_total in Legacy
           lastUpdated: serverTimestamp(),
         };
 
@@ -108,7 +113,7 @@ export async function GET() {
           id: docId, 
           status: 'success', 
           placeId: placeId,
-          rating: result.rating,
+          rating: data.rating,
           reviewCount: finalReviews.length,
           newAdded: newReviews.length
         });
