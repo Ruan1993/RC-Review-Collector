@@ -49,8 +49,8 @@ export async function GET() {
           continue;
         }
 
-        // --- FORCE EXECUTION RUN ---
-        // 1. Hard-code empty array (ignoring DB)
+        // --- FORCE EXECUTION RUN (HARD OVERWRITE) ---
+        // 1. Hard-code empty array (ignoring DB) to ensure we overwrite everything
         const existingReviews = []; 
         
         // 2. Get latest from Google (New API structure)
@@ -95,7 +95,7 @@ export async function GET() {
             // Sort by time (newest first)
             finalReviews.sort((a, b) => b.time - a.time);
             
-            console.log(`[${docId}] Force Overwrite: Saving ${processedNewReviews.length} reviews.`);
+            console.log(`[${docId}] Overwrote ${processedNewReviews.length} reviews (Force Refresh).`);
         } else {
             console.log(`[${docId}] No new reviews found in Google response.`);
         }
