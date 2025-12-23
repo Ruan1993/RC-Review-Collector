@@ -41,8 +41,13 @@ export async function GET() {
         
         // --- REFACTOR: Incremental Append Logic ---
         const latestReviews = result.reviews || [];
-        const existingReviews = widgetData.reviews || [];
         
+        // --- TEMPORARY FIX: WIPE LOGIC ---
+        // Instead of merging, we are reprocessing the fetched reviews to fix missing photos.
+        // We will treat all fetched reviews as "new" to ensure they get the photo URL processing.
+        // const existingReviews = widgetData.reviews || []; // DISABLED FOR FIX
+        const existingReviews = []; // Treat as empty to force overwrite/re-add
+
         // Filter out duplicates based on author_name and time
         // Note: Google Places API reviews don't always have a stable unique ID, 
         // so we use a composite key of author + time.
@@ -69,7 +74,7 @@ export async function GET() {
                 return {
                     ...review,
                     profile_photo_url: review.profile_photo_url || null,
-                    photos: photoUrls // Store array of valid image URLs
+                    photos: photoUrls || [] // Store array of valid image URLs, default to empty array
                 };
             });
 
