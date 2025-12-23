@@ -134,6 +134,15 @@
       `<span style="opacity: ${i < topReview.rating ? 1 : 0.3}">${starSvg}</span>`
     ).join('');
 
+    // Avatar Logic
+    let avatarHtml = '';
+    if (topReview.profile_photo_url) {
+      avatarHtml = `<img src="${topReview.profile_photo_url}" class="review-avatar" alt="${topReview.author_name}" onload="this.classList.add('loaded')">`;
+    } else {
+      const initial = topReview.author_name ? topReview.author_name.charAt(0).toUpperCase() : '?';
+      avatarHtml = `<div class="avatar-placeholder">${initial}</div>`;
+    }
+
     shadow.innerHTML = `
       <style>${styles}</style>
       <div class="widget-container">
@@ -145,7 +154,10 @@
           </div>
         </div>
         <div class="review-content">
-          <span class="review-author">${topReview.author_name}</span>
+          <div class="review-author-container">
+            ${avatarHtml}
+            <span class="review-author-name">${topReview.author_name}</span>
+          </div>
           <div class="stars" style="display:flex; gap:1px; margin-bottom: 8px;">${reviewStarsHtml}</div>
           "${topReview.text.length > 120 ? topReview.text.substring(0, 120) + '...' : topReview.text}"
         </div>
