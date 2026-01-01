@@ -5,6 +5,7 @@ import { doc, getDoc } from 'firebase/firestore';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
+  // Prevent caching for this route
   try {
     // Get the widget ID from the URL query parameter (default to 'default-widget')
     const { searchParams } = new URL(request.url);
